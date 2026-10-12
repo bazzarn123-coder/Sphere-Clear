@@ -1,0 +1,905 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Sphere Clear - Ultimate Edition</title>
+    <!-- Browser Favicon -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔮</text></svg>">
+    <!-- Tailwind CSS for UI styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js Core -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            height: 100dvh;
+            background: radial-gradient(circle at center, #0f172a 0%, #020617 100%);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none;
+        }
+        #canvas-container {
+            width: 100vw;
+            height: 100dvh;
+            display: block;
+        }
+        .slot-box {
+            transition: all 0.2s ease;
+        }
+        header {
+            padding-top: max(0.5rem, env(safe-area-inset-top, 0.5rem));
+        }
+        footer {
+            padding-bottom: max(1rem, env(safe-area-inset-bottom, 1rem));
+        }
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 9999px;
+        }
+    </style>
+</head>
+<body class="relative h-[100dvh] w-screen overflow-hidden flex flex-col justify-between">
+
+    <!-- Splash Screen Overlay -->
+    <div id="splash-screen" onclick="dismissSplash()" class="fixed inset-0 z-50 flex items-center justify-center bg-black cursor-pointer select-none">
+        <img src="splash.jpg" alt="Sphere Clear Splash Screen" class="w-full h-full object-cover pointer-events-none" />
+    </div>
+
+    <!-- Top UI: Header & Compact Color Boxes Collector -->
+    <header class="absolute top-0 left-0 w-full p-2 flex flex-col items-center z-10 pointer-events-none">
+        <div class="flex items-center justify-between w-full max-w-md px-3 pointer-events-auto bg-white/10 backdrop-blur-md rounded-xl shadow-lg border border-white/20 py-2">
+            <div>
+                <div class="flex items-center space-x-2">
+                    <h1 class="text-white font-black text-sm tracking-wider drop-shadow">🔮 SPHERE CLEAR</h1>
+                    <span onclick="openShop()" class="cursor-pointer bg-amber-500/20 border border-amber-400/40 px-1.5 py-0.5 rounded-lg text-amber-300 font-bold text-[10px] flex items-center space-x-1">
+                        <span>🪙</span><span id="header-coins">0</span>
+                    </span>
+                </div>
+                <div>
+                    <p id="level-indicator" class="text-indigo-200 text-[10px] font-medium">Level 1 of 100</p>
+                </div>
+            </div>
+            <div class="flex items-center space-x-1">
+                <button onclick="undoMove()" class="bg-purple-600 hover:bg-purple-500 text-white px-2 py-1 rounded-lg text-[10px] font-bold shadow transition active:scale-95 cursor-pointer">
+                    ↩️ Undo
+                </button>
+                <button onclick="skipLevel()" class="bg-amber-600 hover:bg-amber-500 text-white px-2 py-1 rounded-lg text-[10px] font-bold shadow transition active:scale-95 cursor-pointer" title="Skip Level">
+                    ⏭️ Skip
+                </button>
+                <button onclick="openShop()" class="bg-amber-600 hover:bg-amber-500 text-white px-2 py-1 rounded-lg text-[10px] font-bold shadow transition active:scale-95 cursor-pointer" title="Shop">
+                    🛍️
+                </button>
+            </div>
+        </div>
+
+        <!-- Target Color Collector Boxes Tray -->
+        <div id="collector-tray" class="flex flex-wrap justify-center gap-1 mt-1.5 pointer-events-auto max-w-md">
+            <!-- Dynamically populated -->
+        </div>
+    </header>
+
+    <!-- 3D Canvas Container -->
+    <div id="canvas-container"></div>
+
+    <!-- Bottom UI: Holding Slots & Minimal Status -->
+    <footer class="absolute bottom-0 left-0 w-full px-3 flex flex-col items-center z-10 pointer-events-none">
+        <div class="w-full max-w-md bg-white/10 backdrop-blur-md rounded-2xl shadow-xl border border-white/20 p-2.5 pointer-events-auto flex flex-col items-center">
+            <div class="flex justify-between w-full text-[10px] text-indigo-200 font-semibold mb-1.5 px-1">
+                <span>SLOTS (<span id="slot-count">0</span>/<span id="max-slot-count">5</span>)</span>
+                <span id="game-status" class="text-cyan-300">Tap outer spheres</span>
+            </div>
+            <!-- Holding Slots Grid -->
+            <div id="holding-slots" class="grid gap-1 w-full">
+                <!-- Populated dynamically -->
+            </div>
+        </div>
+    </footer>
+
+    <!-- Win / Game Over Modal Overlay -->
+    <div id="modal" class="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-white/20 p-6 rounded-3xl text-center max-w-sm w-full shadow-2xl">
+            <div id="modal-stars" class="text-3xl mb-2">⭐⭐⭐</div>
+            <h2 id="modal-title" class="text-2xl font-black text-white mb-1">🎉 Level Completed!</h2>
+            <p id="modal-desc" class="text-indigo-200 text-sm mb-4">Sculpture cleared!</p>
+            <div id="modal-reward" class="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-3 mb-6 text-amber-300 font-bold text-sm flex items-center justify-center space-x-2">
+                <span>🪙 +100 Coins</span>
+            </div>
+            <button id="modal-btn" onclick="nextLevel()" class="w-full bg-gradient-to-r from-cyan-500 to-purple-600 hover:from-cyan-600 hover:to-purple-700 text-white font-bold py-3 rounded-2xl shadow-lg transition active:scale-95 cursor-pointer">Next Level</button>
+        </div>
+    </div>
+
+    <!-- Shop & Themes Modal -->
+    <div id="shop-modal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-white/20 p-6 rounded-3xl max-w-md w-full shadow-2xl flex flex-col max-h-[85dvh]">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-black text-white flex items-center space-x-2"><span>🛍️ Skins</span></h2>
+                <button onclick="closeShop()" class="text-slate-400 hover:text-white font-bold text-lg cursor-pointer">✕</button>
+            </div>
+            <div class="flex items-center justify-between bg-white/5 p-3 rounded-2xl mb-4 border border-white/10">
+                <span class="text-indigo-200 text-sm">Balance:</span>
+                <span class="text-amber-300 font-extrabold text-base flex items-center space-x-1"><span>🪙</span><span id="shop-coins">0</span></span>
+            </div>
+            <div class="overflow-y-auto space-y-3 pr-1 flex-1">
+                <h3 class="text-xs font-bold text-indigo-400 uppercase tracking-wider">Themes</h3>
+                <div id="theme-list" class="space-y-2">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Achievements Modal -->
+    <div id="achievement-modal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-white/20 p-6 rounded-3xl max-w-md w-full shadow-2xl flex flex-col max-h-[85dvh]">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-black text-white flex items-center space-x-2"><span>🏆 Badges</span></h2>
+                <button onclick="closeAchievements()" class="text-slate-400 hover:text-white font-bold text-lg cursor-pointer">✕</button>
+            </div>
+            <div class="overflow-y-auto space-y-2.5 pr-1 flex-1" id="achievement-list">
+                <!-- Populated by JS -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Game Logic JavaScript -->
+    <script>
+        let splashActive = true;
+
+        function dismissSplash() {
+            const splashEl = document.getElementById('splash-screen');
+            if (splashEl) {
+                splashEl.style.display = 'none';
+            }
+            splashActive = false;
+            initAudio();
+        }
+
+        let savedProfile = {};
+        try {
+            savedProfile = JSON.parse(localStorage.getItem('sphere_clear_profile')) || {};
+        } catch (e) {
+            savedProfile = {};
+        }
+
+        let playerProfile = Object.assign({
+            coins: 100,
+            level: 1,
+            unlockedThemes: ['classic'],
+            activeTheme: 'classic',
+            achievements: {
+                firstWin: false,
+                level25: false,
+                level50: false,
+                coinHoarder: false,
+                chainBreaker: false
+            }
+        }, savedProfile);
+
+        playerProfile.achievements = Object.assign({ firstWin: false, level25: false, level50: false, coinHoarder: false, chainBreaker: false }, savedProfile.achievements || {});
+        if (!playerProfile.unlockedThemes) playerProfile.unlockedThemes = ['classic'];
+
+        function saveProfile() {
+            try {
+                localStorage.setItem('sphere_clear_profile', JSON.stringify(playerProfile));
+            } catch (e) {}
+            updateGlobalUI();
+        }
+
+        const THEMES = [
+            { id: 'classic', name: 'Glossy Neon', cost: 0, roughness: 0.3, metalness: 0.4 },
+            { id: 'metal', name: 'Liquid Chrome', cost: 300, roughness: 0.1, metalness: 0.9 },
+            { id: 'crystal', name: 'Prism Crystal', cost: 600, roughness: 0.1, metalness: 0.1, transmission: 0.9 },
+            { id: 'cosmic', name: 'Dark Nebula', cost: 1000, roughness: 0.5, metalness: 0.8, emissive: true }
+        ];
+
+        const ACHIEVEMENTS_DEF = [
+            { id: 'firstWin', title: 'First Steps', desc: 'Clear your first sculpture.', reward: 50 },
+            { id: 'chainBreaker', title: 'Chain Breaker', desc: 'Unlock 10 chained spheres.', reward: 150 },
+            { id: 'level25', title: 'Puzzle Apprentice', desc: 'Reach Level 25.', reward: 300 },
+            { id: 'level50', title: 'Sphere Master', desc: 'Reach Level 50.', reward: 600 },
+            { id: 'coinHoarder', title: 'Treasury Vault', desc: 'Accumulate 1,000 coins.', reward: 500 }
+        ];
+
+        let audioCtx = null;
+        function initAudio() {
+            try {
+                if (!audioCtx) {
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                if (audioCtx.state === 'suspended') {
+                    audioCtx.resume();
+                }
+            } catch (e) {}
+        }
+
+        function playSound(type) {
+            if (!audioCtx) return;
+            try {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                
+                const now = audioCtx.currentTime;
+                if (type === 'tap') {
+                    osc.frequency.setValueAtTime(450, now);
+                    osc.frequency.exponentialRampToValueAtTime(900, now + 0.1);
+                    gain.gain.setValueAtTime(0.2, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+                    osc.start(now);
+                    osc.stop(now + 0.1);
+                } else if (type === 'match') {
+                    osc.frequency.setValueAtTime(523.25, now);
+                    osc.frequency.setValueAtTime(659.25, now + 0.08);
+                    osc.frequency.setValueAtTime(783.99, now + 0.16);
+                    gain.gain.setValueAtTime(0.2, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+                    osc.start(now);
+                    osc.stop(now + 0.3);
+                } else if (type === 'locked') {
+                    osc.type = 'square';
+                    osc.frequency.setValueAtTime(150, now);
+                    osc.frequency.setValueAtTime(100, now + 0.1);
+                    gain.gain.setValueAtTime(0.2, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+                    osc.start(now);
+                    osc.stop(now + 0.2);
+                } else if (type === 'gameover') {
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(300, now);
+                    osc.frequency.exponentialRampToValueAtTime(100, now + 0.4);
+                    gain.gain.setValueAtTime(0.3, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+                    osc.start(now);
+                    osc.stop(now + 0.4);
+                }
+            } catch (e) {}
+        }
+
+        let scene, camera, renderer;
+        let sculptureGroup;
+        let yarnNodes = [];
+        let holdingSlots = [];
+        let moveHistory = [];
+        let collectorBoxes = [];
+        let currentLevel = playerProfile.level || 1;
+        const maxLevels = 100;
+        let isAnimating = false;
+        let chainedUnlockedCount = 0;
+        let levelMovesCount = 0;
+        let autoAdvanceTimer = null;
+        let levelCompleted = false;
+
+        let isDragging = false;
+        let previousMousePosition = { x: 0, y: 0 };
+        let pointerDownPos = { x: 0, y: 0 };
+
+        const COLOR_PALETTE = [
+            { name: 'Cyan Glow', hex: 0x06b6d4, css: 'bg-cyan-500' },
+            { name: 'Electric Pink', hex: 0xec4899, css: 'bg-pink-500' },
+            { name: 'Neon Amber', hex: 0xf59e0b, css: 'bg-amber-500' },
+            { name: 'Emerald Gem', hex: 0x10b981, css: 'bg-emerald-500' },
+            { name: 'Violet Shine', hex: 0x8b5cf6, css: 'bg-violet-500' },
+            { name: 'Sunset Coral', hex: 0xf43f5e, css: 'bg-rose-500' },
+            { name: 'Pure White', hex: 0xffffff, css: 'bg-white border border-slate-400' },
+            { name: 'Navy Blue', hex: 0x1e3a8a, css: 'bg-blue-900' },
+            { name: 'Fuchsia Punch', hex: 0xd946ef, css: 'bg-fuchsia-500' },
+            { name: 'Lime Electric', hex: 0x84cc16, css: 'bg-lime-500' }
+        ];
+
+        window.addEventListener('DOMContentLoaded', () => {
+            try {
+                if (typeof THREE === 'undefined') {
+                    alert("Three.js failed to load. Please check your internet connection.");
+                    return;
+                }
+                init3D();
+            } catch (err) {
+                console.error("Initialization error:", err);
+            }
+        });
+
+        function updateGlobalUI() {
+            try {
+                document.getElementById('header-coins').innerText = playerProfile.coins;
+                document.getElementById('shop-coins').innerText = playerProfile.coins;
+            } catch (e) {}
+            checkAchievementsProgress();
+        }
+
+        function init3D() {
+            const container = document.getElementById('canvas-container');
+            scene = new THREE.Scene();
+
+            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 0, 7.5);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            container.appendChild(renderer.domElement);
+
+            sculptureGroup = new THREE.Group();
+            scene.add(sculptureGroup);
+
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+            scene.add(ambientLight);
+
+            const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+            dirLight.position.set(5, 10, 7);
+            scene.add(dirLight);
+
+            const backLight = new THREE.DirectionalLight(0x93c5fd, 0.5);
+            backLight.position.set(-5, -5, -5);
+            scene.add(backLight);
+
+            window.addEventListener('resize', onWindowResize);
+            
+            window.addEventListener('pointerdown', onPointerDown);
+            window.addEventListener('pointermove', onPointerMove);
+            window.addEventListener('pointerup', onPointerUp);
+
+            currentLevel = playerProfile.level || 1;
+            updateGlobalUI();
+            loadLevel(currentLevel);
+            animate();
+        }
+
+        function onWindowResize() {
+            if (!camera || !renderer) return;
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function loadLevel(lvl) {
+            if (autoAdvanceTimer) {
+                clearTimeout(autoAdvanceTimer);
+                autoAdvanceTimer = null;
+            }
+
+            currentLevel = lvl;
+            levelMovesCount = 0;
+            levelCompleted = false;
+
+            const lvlInd = document.getElementById('level-indicator');
+            if (lvlInd) lvlInd.innerText = `Level ${lvl} of${maxLevels}`;
+            
+            const modalEl = document.getElementById('modal');
+            if (modalEl) modalEl.classList.add('hidden');
+            
+            const statusEl = document.getElementById('game-status');
+            if (statusEl) statusEl.innerText = 'Tap outer spheres';
+            
+            const maxSlots = 5;
+            const maxSlotCountEl = document.getElementById('max-slot-count');
+            if (maxSlotCountEl) maxSlotCountEl.innerText = maxSlots;
+
+            yarnNodes.forEach(node => {
+                sculptureGroup.remove(node.mesh);
+                if (node.chainMesh) sculptureGroup.remove(node.chainMesh);
+            });
+            yarnNodes = [];
+            holdingSlots = [];
+            moveHistory = [];
+            
+            const numColors = Math.min(10, 2 + Math.floor((lvl - 1) / 3));
+            const activeColors = COLOR_PALETTE.slice(0, numColors);
+            const extraBalls = Math.floor((lvl - 1) / 2) * 3;
+            let totalBalls = (activeColors.length * 3) + extraBalls;
+
+            let colorPool = [];
+            let setsRemaining = Math.round(totalBalls / 3);
+            let colorSetCounts = new Array(activeColors.length).fill(1);
+            setsRemaining -= activeColors.length;
+            
+            let cIdx = 0;
+            while (setsRemaining > 0) {
+                colorSetCounts[cIdx]++;
+                setsRemaining--;
+                cIdx = (cIdx + 1) % activeColors.length;
+            }
+
+            activeColors.forEach((col, idx) => {
+                const countForColor = colorSetCounts[idx] * 3;
+                for (let s = 0; s < countForColor; s++) {
+                    colorPool.push(col);
+                }
+            });
+
+            colorPool.sort(() => Math.random() - 0.5);
+
+            collectorBoxes = activeColors.map((col, idx) => ({
+                color: col,
+                collected: 0,
+                target: colorSetCounts[idx] * 3
+            }));
+            renderCollectorTray();
+
+            const count = colorPool.length;
+            const sphereRadius = 0.20;
+            const geometry = new THREE.SphereGeometry(sphereRadius, 32, 32);
+            const theme = THEMES.find(t => t.id === playerProfile.activeTheme) || THEMES[0];
+
+            const placedPositions = [];
+            const minDistance = sphereRadius * 2 + 0.04;
+
+            for (let i = 0; i < count; i++) {
+                let validPos = false;
+                let x = 0, y = 0, z = 0, radius = 1;
+                let attempts = 0;
+
+                while (!validPos && attempts < 200) {
+                    attempts++;
+                    const phi = Math.acos(-1 + (2 * Math.random()));
+                    const theta = Math.random() * Math.PI * 2;
+                    
+                    const layerRand = Math.random();
+                    if (layerRand < 0.35) {
+                        radius = 0.40 + Math.random() * 0.40;
+                    } else if (layerRand < 0.7) {
+                        radius = 0.85 + Math.random() * 0.40;
+                    } else {
+                        radius = 1.30 + Math.random() * 0.35;
+                    }
+
+                    x = radius * Math.cos(theta) * Math.sin(phi);
+                    y = radius * Math.sin(theta) * Math.sin(phi);
+                    z = radius * Math.cos(phi);
+
+                    validPos = true;
+                    for (let p of placedPositions) {
+                        const dx = p.x - x;
+                        const dy = p.y - y;
+                        const dz = p.z - z;
+                        if (Math.sqrt(dx*dx + dy*dy + dz*dz) < minDistance) {
+                            validPos = false;
+                            break;
+                        }
+                    }
+                }
+
+                placedPositions.push({ x, y, z });
+
+                const colObj = colorPool[i];
+                
+                const matConfig = {
+                    color: colObj.hex,
+                    roughness: theme.roughness,
+                    metalness: theme.metalness
+                };
+                if (theme.transmission) {
+                    matConfig.transmission = theme.transmission;
+                    matConfig.transparent = true;
+                    matConfig.opacity = 0.85;
+                }
+                if (theme.emissive) {
+                    matConfig.emissive = colObj.hex;
+                    matConfig.emissiveIntensity = 0.3;
+                }
+
+                const material = new THREE.MeshStandardMaterial(matConfig);
+                const mesh = new THREE.Mesh(geometry, material);
+                mesh.position.set(x, y, z);
+
+                let isLocked = false;
+                let chainMesh = null;
+                if (lvl >= 5 && radius < 1.0 && Math.random() < 0.3) {
+                    isLocked = true;
+                    const torusGeo = new THREE.TorusGeometry(sphereRadius * 1.15, 0.025, 16, 32);
+                    const torusMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, metalness: 0.9, roughness: 0.1 });
+                    chainMesh = new THREE.Mesh(torusGeo, torusMat);
+                    chainMesh.position.set(x, y, z);
+                    chainMesh.rotation.x = Math.random() * Math.PI;
+                    chainMesh.rotation.y = Math.random() * Math.PI;
+                    sculptureGroup.add(chainMesh);
+                }
+
+                mesh.userData = { id: i, color: colObj, isLocked: isLocked };
+                sculptureGroup.add(mesh);
+
+                yarnNodes.push({ id: i, mesh: mesh, color: colObj, isLocked: isLocked, chainMesh: chainMesh });
+            }
+
+            updateUI();
+        }
+
+        function renderCollectorTray() {
+            const tray = document.getElementById('collector-tray');
+            if (!tray) return;
+            tray.innerHTML = '';
+            collectorBoxes.forEach(box => {
+                const div = document.createElement('div');
+                div.className = `flex items-center space-x-1 px-2 py-0.5 bg-white/10 backdrop-blur-md rounded-lg border border-white/20 text-white text-[10px] font-bold`;
+                div.innerHTML = `<span class="w-2.5 h-2.5 rounded-full ${box.color.css} inline-block shadow"></span><span>${box.collected}/${box.target}</span>`;
+                tray.appendChild(div);
+            });
+        }
+
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+
+        function onPointerDown(event) {
+            if (splashActive) return;
+            if (event.clientY < 110 || event.clientY > window.innerHeight - 80) return;
+            isDragging = true;
+            previousMousePosition = { x: event.clientX, y: event.clientY };
+            pointerDownPos = { x: event.clientX, y: event.clientY };
+        }
+
+        function onPointerMove(event) {
+            if (splashActive || !isDragging) return;
+            const deltaX = event.clientX - previousMousePosition.x;
+            const deltaY = event.clientY - previousMousePosition.y;
+
+            if (sculptureGroup) {
+                sculptureGroup.rotation.y += deltaX * 0.008;
+                sculptureGroup.rotation.x += deltaY * 0.008;
+            }
+
+            previousMousePosition = { x: event.clientX, y: event.clientY };
+        }
+
+        function onPointerUp(event) {
+            if (splashActive || !isDragging) return;
+            isDragging = false;
+
+            const distMoved = Math.hypot(event.clientX - pointerDownPos.x, event.clientY - pointerDownPos.y);
+            if (distMoved < 5) {
+                if (event.clientY < 110 || event.clientY > window.innerHeight - 80) return;
+                if (isAnimating || levelCompleted) return;
+
+                mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+                mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+                raycaster.setFromCamera(mouse, camera);
+                const meshes = yarnNodes.map(n => n.mesh);
+                const intersects = raycaster.intersectObjects(meshes);
+
+                if (intersects.length > 0) {
+                    const hitMesh = intersects[0].object;
+                    const nodeIndex = yarnNodes.findIndex(n => n.mesh === hitMesh);
+                    if (nodeIndex !== -1) {
+                        const node = yarnNodes[nodeIndex];
+
+                        if (node.isLocked) {
+                            playSound('locked');
+                            const statusEl = document.getElementById('game-status');
+                            if (statusEl) statusEl.innerText = '🔒 Chained!';
+                            return;
+                        }
+
+                        pullThread(nodeIndex);
+                    }
+                }
+            }
+        }
+
+        function pullThread(index) {
+            const node = yarnNodes[index];
+            playSound('tap');
+            levelMovesCount++;
+
+            const maxSlots = 5;
+            if (holdingSlots.length >= maxSlots) {
+                const statusEl = document.getElementById('game-status');
+                if (statusEl) statusEl.innerText = 'Slots Full!';
+                playSound('gameover');
+                showModal(false);
+                return;
+            }
+
+            isAnimating = true;
+            
+            if (node.chainMesh) {
+                sculptureGroup.remove(node.chainMesh);
+            }
+
+            moveHistory.push({
+                nodeData: { ...node, meshPosition: node.mesh.position.clone() },
+                index: index,
+                holdingSlotsSnapshot: [...holdingSlots],
+                collectorBoxesSnapshot: collectorBoxes.map(b => ({ ...b }))
+            });
+
+            sculptureGroup.remove(node.mesh);
+            yarnNodes.splice(index, 1);
+
+            holdingSlots.push(node.color);
+            checkMatches();
+            checkUnlocks();
+
+            isAnimating = false;
+            updateUI();
+
+            if (yarnNodes.length === 0 && !levelCompleted) {
+                levelCompleted = true;
+                playSound('match');
+                completeLevel();
+            }
+        }
+
+        function checkUnlocks() {
+            const remainingLocked = yarnNodes.filter(n => n.isLocked);
+            if (remainingLocked.length > 0 && yarnNodes.length < 15) {
+                const unlockTarget = remainingLocked[0];
+                if (unlockTarget) {
+                    unlockTarget.isLocked = false;
+                    if (unlockTarget.chainMesh) {
+                        sculptureGroup.remove(unlockTarget.chainMesh);
+                        unlockTarget.chainMesh = null;
+                    }
+                    chainedUnlockedCount++;
+                    if (chainedUnlockedCount >= 10) {
+                        playerProfile.achievements.chainBreaker = true;
+                    }
+                }
+            }
+        }
+
+        function undoMove() {
+            if (moveHistory.length === 0 || isAnimating || levelCompleted) return;
+            isAnimating = true;
+
+            const lastMove = moveHistory.pop();
+            
+            sculptureGroup.add(lastMove.nodeData.mesh);
+            if (lastMove.nodeData.chainMesh) {
+                sculptureGroup.add(lastMove.nodeData.chainMesh);
+            }
+            yarnNodes.splice(lastMove.index, 0, {
+                id: lastMove.nodeData.id,
+                mesh: lastMove.nodeData.mesh,
+                color: lastMove.nodeData.color,
+                isLocked: lastMove.nodeData.isLocked,
+                chainMesh: lastMove.nodeData.chainMesh
+            });
+
+            holdingSlots = lastMove.holdingSlotsSnapshot;
+            collectorBoxes = lastMove.collectorBoxesSnapshot;
+
+            renderCollectorTray();
+            updateUI();
+            const statusEl = document.getElementById('game-status');
+            if (statusEl) statusEl.innerText = 'Undone';
+            playSound('tap');
+            isAnimating = false;
+        }
+
+        function checkMatches() {
+            const colorCounts = {};
+            holdingSlots.forEach(col => {
+                colorCounts[col.name] = (colorCounts[col.name] || 0) + 1;
+            });
+
+            for (let colName in colorCounts) {
+                if (colorCounts[colName] >= 3) {
+                    playSound('match');
+                    let removed = 0;
+                    holdingSlots = holdingSlots.filter(col => {
+                        if (col.name === colName && removed < 3) {
+                            removed++;
+                            return false;
+                        }
+                        return true;
+                    });
+
+                    const box = collectorBoxes.find(b => b.color.name === colName);
+                    if (box) {
+                        box.collected = Math.min(box.target, box.collected + 3);
+                    }
+                    renderCollectorTray();
+                }
+            }
+        }
+
+        function updateUI() {
+            const maxSlots = 5;
+            const slotCountEl = document.getElementById('slot-count');
+            const maxSlotCountEl = document.getElementById('max-slot-count');
+            if (slotCountEl) slotCountEl.innerText = holdingSlots.length;
+            if (maxSlotCountEl) maxSlotCountEl.innerText = maxSlots;
+            
+            const trayContainer = document.getElementById('holding-slots');
+            if (!trayContainer) return;
+            trayContainer.innerHTML = '';
+            trayContainer.style.gridTemplateColumns = `repeat(${maxSlots}, minmax(0, 1fr))`;
+
+            for (let idx = 0; idx < maxSlots; idx++) {
+                const el = document.createElement('div');
+                if (holdingSlots[idx]) {
+                    el.className = `slot-box h-10 rounded-lg flex items-center justify-center shadow-md ${holdingSlots[idx].css} border border-white/40`;
+                    el.innerHTML = `<span class="w-3 h-3 rounded-full bg-white/30"></span>`;
+                } else {
+                    el.className = `slot-box h-10 bg-white/10 border border-dashed border-white/30 rounded-lg flex items-center justify-center`;
+                    el.innerHTML = ``;
+                }
+                trayContainer.appendChild(el);
+            }
+        }
+
+        function completeLevel() {
+            let stars = 3;
+            if (levelMovesCount > 35) stars = 2;
+            if (levelMovesCount > 50) stars = 1;
+
+            const coinReward = 50 + (currentLevel * 5) + (stars * 25);
+            playerProfile.coins += coinReward;
+
+            playerProfile.achievements.firstWin = true;
+            if (currentLevel >= 25) playerProfile.achievements.level25 = true;
+            if (currentLevel >= 50) playerProfile.achievements.level50 = true;
+            if (playerProfile.coins >= 1000) playerProfile.achievements.coinHoarder = true;
+
+            saveProfile();
+            showModal(true, stars, coinReward);
+
+            if (currentLevel < maxLevels) {
+                if (autoAdvanceTimer) clearTimeout(autoAdvanceTimer);
+                autoAdvanceTimer = setTimeout(() => {
+                    nextLevel();
+                }, 1600);
+            }
+        }
+
+        function showModal(isWin, stars = 3, coins = 0) {
+            const modal = document.getElementById('modal');
+            const title = document.getElementById('modal-title');
+            const desc = document.getElementById('modal-desc');
+            const btn = document.getElementById('modal-btn');
+            const starDiv = document.getElementById('modal-stars');
+            const rewardDiv = document.getElementById('modal-reward');
+
+            if (!modal) return;
+            modal.classList.remove('hidden');
+            if (isWin) {
+                if (starDiv) starDiv.innerText = '⭐'.repeat(stars);
+                if (starDiv) starDiv.classList.remove('hidden');
+                if (rewardDiv) rewardDiv.classList.remove('hidden');
+                if (rewardDiv) rewardDiv.innerHTML = `<span>🪙 +${coins} Coins</span>`;
+                if (title) title.innerText = currentLevel >= maxLevels ? '🏆 Champion!' : '🎉 Cleared!';
+                if (desc) desc.innerText = `Cleared in ${levelMovesCount} moves`;
+                if (btn) btn.innerText = currentLevel >= maxLevels ? 'Play Again' : 'Next Level';
+            } else {
+                if (starDiv) starDiv.classList.add('hidden');
+                if (rewardDiv) rewardDiv.classList.add('hidden');
+                if (title) title.innerText = '⚠️ Game Over';
+                if (desc) desc.innerText = 'Slots overflowed!';
+                if (btn) btn.innerText = 'Retry';
+            }
+        }
+
+        function nextLevel() {
+            if (autoAdvanceTimer) {
+                clearTimeout(autoAdvanceTimer);
+                autoAdvanceTimer = null;
+            }
+            if (currentLevel < maxLevels) {
+                currentLevel++;
+            } else {
+                currentLevel = 1;
+            }
+            playerProfile.level = currentLevel;
+            saveProfile();
+            loadLevel(currentLevel);
+        }
+
+        function skipLevel() {
+            if (levelCompleted) return;
+            levelCompleted = true;
+            playSound('match');
+            const statusEl = document.getElementById('game-status');
+            if (statusEl) statusEl.innerText = 'Skipped';
+            nextLevel();
+        }
+
+        function openShop() {
+            const list = document.getElementById('theme-list');
+            if (!list) return;
+            list.innerHTML = '';
+            THEMES.forEach(theme => {
+                const isUnlocked = playerProfile.unlockedThemes.includes(theme.id);
+                const isActive = playerProfile.activeTheme === theme.id;
+                
+                const div = document.createElement('div');
+                div.className = `flex items-center justify-between p-2.5 rounded-xl border ${isActive ? 'bg-indigo-600/30 border-indigo-400' : 'bg-white/5 border-white/10'}`;
+                div.innerHTML = `
+                    <div>
+                        <div class="text-white font-bold text-xs">${theme.name}</div>
+                        <div class="text-indigo-200 text-[10px]">${isUnlocked ? (isActive ? 'Active' : 'Unlocked') : `🪙 ${theme.cost}`}</div>
+                    </div>
+                    <div>
+                        ${isUnlocked ? 
+                            `<button onclick="setActiveTheme('${theme.id}')" class="px-2.5 py-1 rounded-lg text-[10px] font-bold ${isActive ? 'bg-cyan-500 text-white' : 'bg-white/10 text-white'} cursor-pointer">${isActive ? 'Active' : 'Equip'}</button>` :
+                            `<button onclick="buyTheme('${theme.id}',${theme.cost})" class="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-amber-500 text-slate-950 cursor-pointer">Unlock</button>`
+                        }
+                    </div>
+                `;
+                list.appendChild(div);
+            });
+            const shopModal = document.getElementById('shop-modal');
+            if (shopModal) shopModal.classList.remove('hidden');
+            updateGlobalUI();
+        }
+
+        function closeShop() {
+            const shopModal = document.getElementById('shop-modal');
+            if (shopModal) shopModal.classList.add('hidden');
+        }
+
+        function setActiveTheme(themeId) {
+            playerProfile.activeTheme = themeId;
+            saveProfile();
+            openShop();
+            loadLevel(currentLevel);
+        }
+
+        function buyTheme(themeId, cost) {
+            if (playerProfile.coins >= cost) {
+                playerProfile.coins -= cost;
+                playerProfile.unlockedThemes.push(themeId);
+                playerProfile.activeTheme = themeId;
+                saveProfile();
+                openShop();
+                loadLevel(currentLevel);
+            } else {
+                alert('Not enough coins!');
+            }
+        }
+
+        function openAchievements() {
+            const list = document.getElementById('achievement-list');
+            if (!list) return;
+            list.innerHTML = '';
+            ACHIEVEMENTS_DEF.forEach(ach => {
+                const isCompleted = playerProfile.achievements[ach.id];
+                const div = document.createElement('div');
+                div.className = `flex items-center justify-between p-2.5 rounded-xl border ${isCompleted ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-white/5 border-white/10'}`;
+                div.innerHTML = `
+                    <div>
+                        <div class="text-white font-bold text-xs flex items-center space-x-1.5">
+                            <span>${isCompleted ? '✅' : '🔒'}</span><span>${ach.title}</span>
+                        </div>
+                        <div class="text-indigo-200 text-[10px] mt-0.5">${ach.desc}</div>
+                    </div>
+                    <div class="text-right">
+                        <span class="text-amber-300 font-bold text-[10px]">🪙 +${ach.reward}</span>
+                    </div>
+                `;
+                list.appendChild(div);
+            });
+            const achModal = document.getElementById('achievement-modal');
+            if (achModal) achModal.classList.remove('hidden');
+        }
+
+        function closeAchievements() {
+            const achModal = document.getElementById('achievement-modal');
+            if (achModal) achModal.classList.add('hidden');
+        }
+
+        function checkAchievementsProgress() {
+            if (playerProfile.coins >= 1000 && !playerProfile.achievements.coinHoarder) {
+                playerProfile.achievements.coinHoarder = true;
+            }
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            if (sculptureGroup && !isDragging) {
+                sculptureGroup.rotation.y += 0.002;
+            }
+
+            if (renderer && scene && camera) {
+                renderer.render(scene, camera);
+            }
+        }
+    </script>
+</body>
+</html>
